@@ -274,8 +274,9 @@ type ExternalServiceSyncResult struct {
 }
 
 type ExternalServiceNamespacesArgs struct {
-	Kind   string
-	Config string
+	ExternalServiceID *int64
+	Kind              string
+	Config            string
 }
 
 type ExternalServiceNamespacesResult struct {
@@ -284,11 +285,12 @@ type ExternalServiceNamespacesResult struct {
 }
 
 type ExternalServiceRepositoriesArgs struct {
-	Kind         string
-	Query        string
-	Config       string
-	First        int32
-	ExcludeRepos []string
+	ExternalServiceID *int64
+	Kind              string
+	Query             string
+	Config            string
+	First             int32
+	ExcludeRepos      []string
 }
 
 type ExternalServiceRepositoriesResult struct {

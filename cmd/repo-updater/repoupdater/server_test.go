@@ -3,6 +3,7 @@ package repoupdater
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -972,6 +973,7 @@ func TestServer_ExternalServiceRepositories(t *testing.T) {
 }`
 
 	githubSource := types.ExternalService{
+		ID:           1,
 		Kind:         extsvc.KindGitHub,
 		CloudDefault: true,
 		Config:       extsvc.NewUnencryptedConfig(githubConnection),
@@ -984,6 +986,7 @@ func TestServer_ExternalServiceRepositories(t *testing.T) {
 	}`
 
 	gitlabSource := types.ExternalService{
+		ID:           2,
 		Kind:         extsvc.KindGitLab,
 		CloudDefault: true,
 		Config:       extsvc.NewUnencryptedConfig(gitlabConnection),
@@ -1024,16 +1027,48 @@ func TestServer_ExternalServiceRepositories(t *testing.T) {
 		},
 	}
 
+	githubExternalServiceConfig := `
+{
+	"url": "https://github.com",
+	"token": "secret-token",
+	"repos": ["org/repo1", "owner/repo2"]
+}`
+
+	githubExternalService := types.ExternalService{
+		ID:           1,
+		Kind:         extsvc.KindGitHub,
+		CloudDefault: true,
+		Config:       extsvc.NewUnencryptedConfig(githubExternalServiceConfig),
+	}
+
+	gitlabExternalServiceConfig := `
+	{
+		"url": "https://gitlab.com",
+		"token": "abc",
+		"projectQuery": ["groups/mygroup/projects"]
+	}`
+
+	gitlabExternalService := types.ExternalService{
+		ID:           2,
+		Kind:         extsvc.KindGitLab,
+		CloudDefault: true,
+		Config:       extsvc.NewUnencryptedConfig(gitlabExternalServiceConfig),
+	}
+
+	var idDoesNotExist int64 = 99
+
 	testCases := []struct {
-		name         string
-		kind         string
-		config       string
-		query        string
-		first        int32
-		excludeRepos []string
-		result       *protocol.ExternalServiceRepositoriesResult
-		src          repos.Source
-		err          string
+		name              string
+		externalService   *types.ExternalService
+		externalServiceID *int64
+		kind              string
+		config            string
+		query             string
+		first             int32
+		excludeRepos      []string
+		result            *protocol.ExternalServiceRepositoriesResult
+		src               repos.Source
+		err               string
 	}{
 		{
 			name:         "discoverable source - github",
@@ -1088,6 +1123,44 @@ func TestServer_ExternalServiceRepositories(t *testing.T) {
 			result: &protocol.ExternalServiceRepositoriesResult{Error: repos.UnimplementedDiscoverySource},
 			err:    repos.UnimplementedDiscoverySource,
 		},
+		{
+			name:              "discoverable source - github - use existing external service",
+			externalService:   &githubExternalService,
+			externalServiceID: &githubExternalService.ID,
+			kind:              extsvc.KindGitHub,
+			config:            "",
+			query:             "",
+			first:             5,
+			excludeRepos:      []string{},
+			src:               repos.NewFakeDiscoverableSource(repos.NewFakeSource(&githubExternalService, nil, githubRepository), false),
+			result:            &protocol.ExternalServiceRepositoriesResult{Repos: []*types.Repo{githubRepository}, Error: ""},
+		},
+		{
+			name:              "external service for ID does not exist and other config parameters are not attempted",
+			externalService:   &githubExternalService,
+			externalServiceID: &idDoesNotExist,
+			kind:              extsvc.KindGitHub,
+			config:            githubExternalServiceConfig,
+			query:             "myquerystring",
+			first:             5,
+			excludeRepos:      []string{},
+			src:               repos.NewFakeDiscoverableSource(repos.NewFakeSource(&githubExternalService, nil, githubRepository), false),
+			result:            &protocol.ExternalServiceRepositoriesResult{Error: fmt.Sprintf("external service not found: %d", idDoesNotExist)},
+			err:               fmt.Sprintf("external service not found: %d", idDoesNotExist),
+		},
+		{
+			name:              "source does not implement discoverable source - use existing external service",
+			externalService:   &gitlabExternalService,
+			externalServiceID: &gitlabExternalService.ID,
+			kind:              extsvc.KindGitHub,
+			config:            "",
+			query:             "",
+			first:             5,
+			excludeRepos:      []string{},
+			src:               repos.NewFakeSource(&gitlabSource, nil, gitlabRepository),
+			result:            &protocol.ExternalServiceRepositoriesResult{Error: repos.UnimplementedDiscoverySource},
+			err:               repos.UnimplementedDiscoverySource,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1097,8 +1170,21 @@ func TestServer_ExternalServiceRepositories(t *testing.T) {
 			ctx := context.Background()
 
 			logger := logtest.Scoped(t)
+			var (
+				sqlDB *sql.DB
+				store repos.Store
+			)
+
+			if tc.externalService != nil {
+				sqlDB = dbtest.NewDB(logger, t)
+				store = repos.NewStore(logtest.Scoped(t), database.NewDB(logger, sqlDB))
+				if err := store.ExternalServiceStore().Upsert(ctx, tc.externalService); err != nil {
+					t.Fatal(err)
+				}
+			}
 
 			s := &Server{
+				Store:  store,
 				Logger: logger,
 			}
 
@@ -1117,11 +1203,12 @@ func TestServer_ExternalServiceRepositories(t *testing.T) {
 			}
 
 			args := protocol.ExternalServiceRepositoriesArgs{
-				Kind:         tc.kind,
-				Config:       tc.config,
-				Query:        tc.query,
-				First:        tc.first,
-				ExcludeRepos: tc.excludeRepos,
+				ExternalServiceID: tc.externalServiceID,
+				Kind:              tc.kind,
+				Config:            tc.config,
+				Query:             tc.query,
+				First:             tc.first,
+				ExcludeRepos:      tc.excludeRepos,
 			}
 
 			res, err := cli.ExternalServiceRepositories(ctx, args)

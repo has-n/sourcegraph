@@ -412,9 +412,30 @@ func (s *Server) handleExternalServiceNamespaces(w http.ResponseWriter, r *http.
 		return
 	}
 
-	externalSvc := &types.ExternalService{
-		Kind:   req.Kind,
-		Config: extsvc.NewUnencryptedConfig(req.Config),
+	var (
+		externalSvc *types.ExternalService
+		err         error
+		result      *protocol.ExternalServiceNamespacesResult
+	)
+
+	externalServiceID := req.ExternalServiceID
+
+	if externalServiceID != nil {
+		externalSvc, err = s.ExternalServiceStore().GetByID(ctx, *externalServiceID)
+		if err != nil {
+			result = &protocol.ExternalServiceNamespacesResult{Error: err.Error()}
+			if errcode.IsNotFound(err) {
+				s.respond(w, http.StatusNotFound, result)
+			} else {
+				s.respond(w, http.StatusInternalServerError, result)
+			}
+			return
+		}
+	} else {
+		externalSvc = &types.ExternalService{
+			Kind:   req.Kind,
+			Config: extsvc.NewUnencryptedConfig(req.Config),
+		}
 	}
 
 	logger := s.Logger.With(log.String("ExternalServiceKind", req.Kind))
@@ -426,7 +447,6 @@ func (s *Server) handleExternalServiceNamespaces(w http.ResponseWriter, r *http.
 		return
 	}
 
-	var result *protocol.ExternalServiceNamespacesResult
 	if err = genericSrc.CheckConnection(ctx); err != nil {
 		result = &protocol.ExternalServiceNamespacesResult{Error: err.Error()}
 		s.respond(w, http.StatusServiceUnavailable, result)
@@ -477,9 +497,30 @@ func (s *Server) handleExternalServiceRepositories(w http.ResponseWriter, r *htt
 		return
 	}
 
-	externalSvc := &types.ExternalService{
-		Kind:   req.Kind,
-		Config: extsvc.NewUnencryptedConfig(req.Config),
+	var (
+		externalSvc *types.ExternalService
+		err         error
+		result      *protocol.ExternalServiceRepositoriesResult
+	)
+
+	externalServiceID := req.ExternalServiceID
+
+	if externalServiceID != nil {
+		externalSvc, err = s.ExternalServiceStore().GetByID(ctx, *externalServiceID)
+		if err != nil {
+			result = &protocol.ExternalServiceRepositoriesResult{Error: err.Error()}
+			if errcode.IsNotFound(err) {
+				s.respond(w, http.StatusNotFound, result)
+			} else {
+				s.respond(w, http.StatusInternalServerError, result)
+			}
+			return
+		}
+	} else {
+		externalSvc = &types.ExternalService{
+			Kind:   req.Kind,
+			Config: extsvc.NewUnencryptedConfig(req.Config),
+		}
 	}
 
 	logger := s.Logger.With(log.String("ExternalServiceKind", req.Kind))
@@ -490,8 +531,6 @@ func (s *Server) handleExternalServiceRepositories(w http.ResponseWriter, r *htt
 		logger.Error("server.query-external-service-repositories", log.Error(err))
 		return
 	}
-
-	var result *protocol.ExternalServiceRepositoriesResult
 
 	if err = genericSrc.CheckConnection(ctx); err != nil {
 		result = &protocol.ExternalServiceRepositoriesResult{Error: err.Error()}

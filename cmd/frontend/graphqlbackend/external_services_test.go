@@ -1492,4 +1492,51 @@ func TestExternalServiceRepositories(t *testing.T) {
 			},
 		})
 	})
+
+	t.Run("", func(t *testing.T) {
+		users := database.NewMockUserStore()
+		users.GetByCurrentAuthUserFunc.SetDefaultReturn(&types.User{SiteAdmin: true}, nil)
+
+		externalServices := database.NewMockExternalServiceStore()
+		externalServices.GetByIDFunc.SetDefaultHook(func(_ context.Context, id int64) (*types.ExternalService, error) {
+			return &types.ExternalService{
+				ID:     id,
+				Kind:   extsvc.KindGitHub,
+				Config: extsvc.NewEmptyConfig(),
+			}, nil
+		})
+
+		db := database.NewMockDB()
+		db.UsersFunc.SetDefaultReturn(users)
+
+		repoupdater.MockExternalServiceRepositories = func(_ context.Context, args protocol.ExternalServiceRepositoriesArgs) (*protocol.ExternalServiceRepositoriesResult, error) {
+			res := protocol.ExternalServiceRepositoriesResult{
+				Repos: []*types.Repo{&repo1, &repo2},
+				Error: "",
+			}
+			return &res, nil
+		}
+
+		t.Cleanup(func() { repoupdater.MockExternalServiceNamespaces = nil })
+
+		RunTest(t, &Test{
+			Schema:         mustParseGraphQLSchema(t, db),
+			Query:          query,
+			ExpectedResult: `null`,
+			ExpectedErrors: []*gqlerrors.QueryError{
+				{
+					Path:    []any{"externalServiceRepositories", "nodes"},
+					Message: "External Service type does not support discovery of repositories and namespaces.",
+				},
+			},
+			Context: ctx,
+			Variables: map[string]any{
+				"kind":  extsvc.KindBitbucketServer,
+				"url":   "remote.com",
+				"token": "mytoken",
+				"query": "",
+				"first": 2,
+			},
+		})
+	})
 }
