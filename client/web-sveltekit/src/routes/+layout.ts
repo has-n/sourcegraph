@@ -1,8 +1,6 @@
 import { from } from 'rxjs'
 import { map, switchMap, take } from 'rxjs/operators'
 
-import type { LayoutLoad } from './$types'
-
 import { browser } from '$app/environment'
 import { isErrorLike } from '$lib/common'
 import { createPlatformContext } from '$lib/context'
@@ -10,6 +8,8 @@ import type { CurrentAuthStateResult } from '$lib/graphql/shared'
 import { getDocumentNode } from '$lib/http-client'
 import { currentAuthStateQuery } from '$lib/loader/auth'
 import { getWebGraphQLClient } from '$lib/web'
+
+import type { LayoutLoad } from './$types'
 
 // Disable server side rendering for the whole app
 export const ssr = false

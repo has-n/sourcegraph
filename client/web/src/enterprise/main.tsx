@@ -4,7 +4,6 @@
 // Don't remove the empty lines between these imports
 
 import '@sourcegraph/shared/src/polyfills'
-
 import '../initBuildInfo'
 import '../monitoring/initMonitoring'
 

@@ -75,6 +75,7 @@ import {
 } from '../../../components/WebHoverOverlay'
 import { updateBrowserHistoryIfChanged, BlobPropsFacet } from '../CodeMirrorBlob'
 
+import { blobPropsFacet } from './index'
 import { CodeMirrorContainer } from './react-interop'
 import {
     preciseWordAtCoords,
@@ -84,8 +85,6 @@ import {
     uiPositionToOffset,
     zeroToOneBasedPosition,
 } from './utils'
-
-import { blobPropsFacet } from './index'
 
 import webOverlayStyles from '../../../components/WebHoverOverlay/WebHoverOverlay.module.scss'
 

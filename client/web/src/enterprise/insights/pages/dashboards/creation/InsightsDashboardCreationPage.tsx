@@ -9,7 +9,9 @@ import { PageHeader, Container, Button, LoadingSpinner, useObservable, Link, Too
 import { LoaderButton } from '../../../../../components/LoaderButton'
 import { PageTitle } from '../../../../../components/PageTitle'
 import { CodeInsightsIcon, CodeInsightsPage } from '../../../components'
-import {} from '../../../components/code-insights-page/CodeInsightsPage'
+
+import '../../../components/code-insights-page/CodeInsightsPage'
+
 import { CodeInsightsBackendContext } from '../../../core'
 import { useUiFeatures } from '../../../hooks'
 

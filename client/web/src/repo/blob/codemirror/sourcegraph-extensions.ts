@@ -27,11 +27,10 @@ import { toURIWithPath, UIPositionSpec } from '@sourcegraph/shared/src/util/url'
 import { getHover } from '../../../backend/features'
 import type { BlobInfo } from '../CodeMirrorBlob'
 
+import { blobPropsFacet } from '.'
 import { documentHighlightsSource } from './document-highlights'
 import { hovercardSource } from './hovercard'
 import { SelectedLineRange, selectedLines } from './linenumbers'
-
-import { blobPropsFacet } from '.'
 
 /**
  * Context holds all the information needed for CodeMirror extensions to

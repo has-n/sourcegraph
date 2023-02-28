@@ -66,14 +66,13 @@ import { HoverThresholdProps } from '../repo/RepoContainer'
 import { useExperimentalFeatures } from '../stores'
 import { parseBrowserRepoURL } from '../util/url'
 
+import { CodeIntelligenceProps } from '.'
 import { Location, LocationGroup, locationGroupQuality, buildRepoLocationGroups, RepoLocationGroup } from './location'
 import { FETCH_HIGHLIGHTED_BLOB } from './ReferencesPanelQueries'
 import { newSettingsGetter } from './settings'
 import { findSearchToken } from './token'
 import { useRepoAndBlob } from './useRepoAndBlob'
 import { isDefined } from './util/helpers'
-
-import { CodeIntelligenceProps } from '.'
 
 import styles from './ReferencesPanel.module.scss'
 
