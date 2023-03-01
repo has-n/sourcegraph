@@ -30,9 +30,15 @@ func ensureExtSVC(observationCtx *observation.Context, url, root string) error {
 }
 
 func doEnsureExtSVC(ctx context.Context, store database.ExternalServiceStore, url, root string) error {
+	var roots []string
+	if root != "" {
+		roots = []string{root}
+	}
+
 	config, err := json.Marshal(schema.OtherExternalServiceConnection{
 		Url:   url,
-		Repos: []string{"src-serve"},
+		Repos: []string{"src-serve-local"},
+		Roots: roots,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal external service configuration")
