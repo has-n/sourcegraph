@@ -19,17 +19,17 @@ import (
 // external service.
 const extSVCID = 0xC0DE
 
-func ensureExtSVC(observationCtx *observation.Context, url string) error {
+func ensureExtSVC(observationCtx *observation.Context, url, root string) error {
 	sqlDB, err := connections.EnsureNewFrontendDB(observationCtx, conf.Get().ServiceConnections().PostgresDSN, "servegit")
 	if err != nil {
 		return errors.Wrap(err, "servegit failed to connect to frontend DB")
 	}
 	db := database.NewDB(observationCtx.Logger, sqlDB)
 
-	return doEnsureExtSVC(context.Background(), db.ExternalServices(), url)
+	return doEnsureExtSVC(context.Background(), db.ExternalServices(), url, root)
 }
 
-func doEnsureExtSVC(ctx context.Context, store database.ExternalServiceStore, url string) error {
+func doEnsureExtSVC(ctx context.Context, store database.ExternalServiceStore, url, root string) error {
 	config, err := json.Marshal(schema.OtherExternalServiceConnection{
 		Url:   url,
 		Repos: []string{"src-serve"},

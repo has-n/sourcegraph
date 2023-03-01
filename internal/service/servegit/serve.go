@@ -28,7 +28,6 @@ import (
 
 type Serve struct {
 	Addr   string
-	Root   string
 	Logger log.Logger
 }
 
@@ -41,7 +40,7 @@ func (s *Serve) Start() error {
 	// Update Addr to what listener actually used.
 	s.Addr = ln.Addr().String()
 
-	s.Logger.Info("serving git repositories", log.String("url", "http://"+s.Addr), log.String("root", s.Root))
+	s.Logger.Info("serving git repositories", log.String("url", "http://"+s.Addr))
 
 	srv := &http.Server{Handler: s.handler()}
 
@@ -108,7 +107,13 @@ func (s *Serve) handler() http.Handler {
 	})
 
 	mux.HandleFunc("/v1/list-repos", func(w http.ResponseWriter, r *http.Request) {
-		repos, err := s.Repos()
+		var req ListReposRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		repos, err := s.ReposUnion(req.Roots)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -126,10 +131,9 @@ func (s *Serve) handler() http.Handler {
 		_ = enc.Encode(&resp)
 	})
 
-	fs := http.FileServer(http.Dir(s.Root))
 	svc := &gitservice.Handler{
 		Dir: func(name string) string {
-			return filepath.Join(s.Root, filepath.FromSlash(name))
+			return filepath.Join(string(filepath.Separator), filepath.FromSlash(name))
 		},
 		Trace: func(ctx context.Context, svc, repo, protocol string) func(error) {
 			start := time.Now()
@@ -146,7 +150,7 @@ func (s *Serve) handler() http.Handler {
 				return
 			}
 		}
-		fs.ServeHTTP(w, r)
+		w.WriteHeader(http.StatusNoContent)
 	})))
 
 	return http.HandlerFunc(mux.ServeHTTP)
@@ -179,9 +183,41 @@ func isGitRepo(path string) bool {
 	return string(out) == ".git\n"
 }
 
-// Repos returns a slice of all the git repositories it finds.
-func (s *Serve) Repos() ([]Repo, error) {
-	root, err := filepath.EvalSymlinks(s.Root)
+// ReposUnion finds a set of git repositories for each root path in roots
+// and returns a slice of the union of results for all roots.
+func (s *Serve) ReposUnion(roots []string) ([]Repo, error) {
+	var repos []Repo
+
+	slices.SortFunc(roots, func(a, b string) bool {
+		return len(a) < len(b)
+	})
+
+	for i := 0; i < len(roots); i++ {
+		currRoot := roots[i]
+		traversed := false
+		for j := 0; j < i; j++ {
+			prevRoot := roots[j]
+			if traversed = strings.HasPrefix(currRoot, prevRoot); traversed {
+				break
+			}
+		}
+
+		if !traversed {
+			// We have not walked this root dir
+			res, err := s.Repos(currRoot)
+			if err != nil {
+				return nil, err
+			}
+			repos = append(repos, res...)
+		}
+	}
+
+	return repos, nil
+}
+
+// Repos returns a slice of all the git repositories it finds for the root path.
+func (s *Serve) Repos(root string) ([]Repo, error) {
+	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		s.Logger.Warn("ignoring error searching", log.String("path", root), log.Error(err))
 		return nil, nil
@@ -280,7 +316,7 @@ func (s *Serve) Walk(root string, repoC chan<- Repo) (bool, error) {
 			reposRootIsRepo.Store(true)
 		}
 
-		cloneURI := pathpkg.Join("/repos", name)
+		cloneURI := pathpkg.Join("/repos", path)
 		clonePath := cloneURI
 
 		// Regular git repos won't clone without the full path to the .git directory.
@@ -388,4 +424,8 @@ func explainAddr(addr string) string {
 See https://docs.sourcegraph.com/admin/external_service/src_serve_git for
 instructions to configure in Sourcegraph.
 `, addr)
+}
+
+type ListReposRequest struct {
+	Roots []string `json:"roots"`
 }

@@ -35,6 +35,16 @@
       "default": "{base}/{repo}",
       "examples": ["pretty-host-name/{repo}"]
     },
+    "roots": {
+      "description": "The root directories to walk when discovering git repositories to mirror. For use with local serve-git supporting multiple root directories. More documentation here: https://docs.sourcegraph.com/admin/external_service/src_serve_git",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "format": "uri-reference",
+        "examples": ["path/to/my/repo", "path/to/my/repo.git/"]
+      }
+    },
     "exclude": {
       "description": "A list of repositories to never mirror by name after applying repositoryPathPattern. Supports excluding by exact name ({\"name\": \"myrepo\"}) or regular expression ({\"pattern\": \".*secret.*\"}).",
       "type": "array",

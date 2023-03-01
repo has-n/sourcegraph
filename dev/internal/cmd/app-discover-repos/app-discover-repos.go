@@ -39,7 +39,6 @@ func main() {
 	flag.Parse()
 
 	srv := &servegit.Serve{
-		Root:   *root,
 		Logger: log.Scoped("serve", ""),
 	}
 
@@ -52,7 +51,7 @@ func main() {
 	}
 
 	if *block {
-		repos, err := srv.Repos()
+		repos, err := srv.Repos(*root)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Repos returned error: %v\n", err)
 			os.Exit(1)
