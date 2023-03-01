@@ -908,6 +908,10 @@ const siteAdminPackageFieldsFragment = gql`
         id
         name
         scheme
+        versions {
+            id
+            version
+        }
         repository {
             id
             name
