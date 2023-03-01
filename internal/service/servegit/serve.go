@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	pathpkg "path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -193,7 +194,7 @@ func (s *Serve) Repos() ([]Repo, error) {
 	)
 	go func() {
 		defer close(repoC)
-		reposRootIsRepo, walkErr = s.walk(root, repoC)
+		reposRootIsRepo, walkErr = s.Walk(root, repoC)
 	}()
 
 	var repos []Repo
@@ -229,8 +230,15 @@ func (s *Serve) Repos() ([]Repo, error) {
 	return repos, nil
 }
 
-func (s *Serve) walk(root string, repoC chan<- Repo) (bool, error) {
+// Walk is the core repos finding routine. This is only exported for use in
+// app-discover-repos, normally you should use Repos instead which does
+// additional work.
+func (s *Serve) Walk(root string, repoC chan<- Repo) (bool, error) {
 	var reposRootIsRepo atomic.Bool
+
+	// A list of dirs which cause us trouble and are unlikely to contain
+	// repos.
+	ignored := ignoredPaths(root)
 
 	// We use fastwalk since it is much faster. Notes for people used to
 	// filepath.WalkDir:
@@ -246,7 +254,10 @@ func (s *Serve) walk(root string, repoC chan<- Repo) (bool, error) {
 
 		// Previously we recursed into bare repositories which is why this check was here.
 		// Now we use this as a sanity check to make sure we didn't somehow stumble into a .git dir.
-		if filepath.Base(path) == ".git" {
+		base := filepath.Base(path)
+		if base == ".git" {
+			return filepath.SkipDir
+		} else if strings.HasPrefix(base, ".") { // skip hidden dirs
 			return filepath.SkipDir
 		}
 
@@ -266,6 +277,13 @@ func (s *Serve) walk(root string, repoC chan<- Repo) (bool, error) {
 			// According to WalkFunc docs, path is always filepath.Join(root,
 			// subpath). So Rel should always work.
 			return errors.Wrapf(err, "filepath.Walk returned %s which is not relative to %s", path, root)
+		}
+
+		if slices.Contains(ignored, subpath) {
+			s.Logger.Debug("ignoring path", log.String("path", path))
+			return filepath.SkipDir
+		} else {
+			fmt.Println(path, root, subpath)
 		}
 
 		name := filepath.ToSlash(subpath)
@@ -294,6 +312,35 @@ func (s *Serve) walk(root string, repoC chan<- Repo) (bool, error) {
 	})
 
 	return reposRootIsRepo.Load(), err
+}
+
+// ignoredPaths returns paths relative to root which should be ignored.
+//
+// In particular this function returns the locations on Mac which trigger
+// permission dialogs. If a user wanted to explore those directories they need
+// to ensure root is the directory.
+func ignoredPaths(root string) []string {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+
+	// For simplicity we only trigger this code path if root is a homedir,
+	// which is the most common mistake made. Note: Mac can be case
+	// insensitive on the FS.
+	if !strings.EqualFold("/Users", filepath.Dir(filepath.Clean(root))) {
+		return nil
+	}
+
+	// Hard to find an actual list. This is based on error messages mentioned
+	// in the Entitlement documentation followed by trial and error.
+	// https://developer.apple.com/documentation/bundleresources/information_property_list/nsdocumentsfolderusagedescription
+	return []string{
+		"Desktop",
+		"Documents",
+		"Downloads",
+		"Pictures",
+		"Library",
+	}
 }
 
 func explainAddr(addr string) string {

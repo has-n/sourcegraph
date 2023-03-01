@@ -9,12 +9,14 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/sourcegraph/log/logtest"
+	"github.com/stretchr/testify/assert"
 )
 
 const testAddress = "test.local:3939"
@@ -182,5 +184,18 @@ func TestEmptyDirIsNotBareRepo(t *testing.T) {
 
 	if isBareRepo(dir) {
 		t.Errorf("Path %s it falsey detected as a bare repository", dir)
+	}
+}
+
+func TestIgnoredPaths(t *testing.T) {
+	got := ignoredPaths("/Users/horse")
+	if runtime.GOOS != "darwin" {
+		assert.Equal(t, nil, got)
+	} else {
+		assert.Equal(t, []string{
+			"Desktop",
+			"Documents",
+			"Downloads",
+		}, got)
 	}
 }
