@@ -199,7 +199,7 @@ func (s OtherSource) otherRepoFromCloneURL(urn string, u *url.URL) (*types.Repo,
 	}, nil
 }
 
-func (s OtherSource) listReposRequest(ctx context.Context, withRoots bool) (*http.Request, error) {
+func (s OtherSource) listReposRequest(withRoots bool) (*http.Request, error) {
 	var (
 		req *http.Request
 		err error
@@ -220,16 +220,15 @@ func (s OtherSource) listReposRequest(ctx context.Context, withRoots bool) (*htt
 	if err != nil {
 		return nil, err
 	}
-
-	return req.WithContext(ctx), nil
+	return req, nil
 }
 
 func (s OtherSource) srcExpose(ctx context.Context, withRoots bool) ([]*types.Repo, error) {
-	req, err := s.listReposRequest(ctx, withRoots)
+	req, err := s.listReposRequest(withRoots)
 	if err != nil {
 		return nil, err
 	}
-
+	req = req.WithContext(ctx)
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
