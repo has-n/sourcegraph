@@ -199,14 +199,18 @@ func (s OtherSource) otherRepoFromCloneURL(urn string, u *url.URL) (*types.Repo,
 	}, nil
 }
 
-func (s OtherSource) listReposRequest(withRoots bool) (*http.Request, error) {
+func (s OtherSource) listReposRequest(requiresRoots bool) (*http.Request, error) {
 	var (
 		req *http.Request
 		err error
 	)
 
 	// Certain versions of src-serve accept a list of directories to discover git repositories within
-	if withRoots {
+	if requiresRoots {
+		if s.conn.Roots == nil {
+			return nil, errors.New("at least one root directory must be defined in the connection")
+		}
+
 		reqBody, marshalErr := json.Marshal(map[string]any{"roots": s.conn.Roots})
 		if marshalErr != nil {
 			return nil, marshalErr
