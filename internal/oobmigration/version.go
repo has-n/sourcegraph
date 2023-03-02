@@ -2,6 +2,7 @@ package oobmigration
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -32,7 +33,10 @@ func newDevVersion(major, minor int) Version {
 	}
 }
 
-var versionPattern = lazyregexp.New(`^v?(\d+)\.(\d+)(?:\.(\d+))?$`)
+var (
+	versionPattern         = lazyregexp.New(`^v?(\d+)\.(\d+)(?:\.(\d+))?$`)
+	insidersVersionPattern = lazyregexp.New(`^[\w-]+_\d{4}-\d{2}-\d{2}_(\d+)\.(\d+)-\w+$`)
+)
 
 // NewVersionFromString parses the major and minor version from the given string. If
 // the string does not look like a parseable version, a false-valued flag is returned.
@@ -54,7 +58,12 @@ func NewVersionAndPatchFromString(v string) (Version, int, bool) {
 
 	matches := versionPattern.FindStringSubmatch(v)
 	if len(matches) < 3 {
-		return Version{}, 0, false
+		matches = insidersVersionPattern.FindStringSubmatch(v)
+		if len(matches) < 3 {
+			return Version{}, 0, false
+		}
+
+		newVersion = newDevVersion
 	}
 
 	major, _ := strconv.Atoi(matches[1])
@@ -145,6 +154,17 @@ func CompareVersions(a, b Version) VersionOrder {
 	}
 
 	return VersionOrderEqual
+}
+
+// SortVersions sorts the given version slice in ascending order.
+func SortVersions(vs []Version) {
+	sort.Slice(vs, func(i, j int) bool {
+		if vs[i].Major == vs[j].Major {
+			return vs[i].Minor < vs[j].Minor
+		}
+
+		return vs[i].Major < vs[j].Major
+	})
 }
 
 // pointIntersectsInterval returns true if point falls within the interval [lower, upper].

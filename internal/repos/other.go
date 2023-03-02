@@ -25,10 +25,11 @@ type (
 	// A OtherSource yields repositories from a single Other connection configured
 	// in Sourcegraph via the external services configuration.
 	OtherSource struct {
-		svc    *types.ExternalService
-		conn   *schema.OtherExternalServiceConnection
-		client httpcli.Doer
-		logger log.Logger
+		svc     *types.ExternalService
+		conn    *schema.OtherExternalServiceConnection
+		exclude excludeFunc
+		client  httpcli.Doer
+		logger  log.Logger
 	}
 
 	// A srcExposeItem is the object model returned by src-cli when serving git repos
@@ -59,7 +60,23 @@ func NewOtherSource(ctx context.Context, svc *types.ExternalService, cf *httpcli
 		return nil, err
 	}
 
-	return &OtherSource{svc: svc, conn: &c, client: cli, logger: logger}, nil
+	var eb excludeBuilder
+	for _, r := range c.Exclude {
+		eb.Exact(r.Name)
+		eb.Pattern(r.Pattern)
+	}
+	exclude, err := eb.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	return &OtherSource{
+		svc:     svc,
+		conn:    &c,
+		exclude: exclude,
+		client:  cli,
+		logger:  logger,
+	}, nil
 }
 
 // CheckConnection at this point assumes availability and relies on errors returned
@@ -72,8 +89,11 @@ func (s OtherSource) CheckConnection(ctx context.Context) error {
 // ListRepos returns all Other repositories accessible to all connections configured
 // in Sourcegraph via the external services configuration.
 func (s OtherSource) ListRepos(ctx context.Context, results chan SourceResult) {
-	if len(s.conn.Repos) == 1 && (s.conn.Repos[0] == "src-expose" || s.conn.Repos[0] == "src-serve") {
-		repos, err := s.srcExpose(ctx)
+	srcServe := len(s.conn.Repos) == 1 && (s.conn.Repos[0] == "src-expose" || s.conn.Repos[0] == "src-serve")
+	srcServeLocal := len(s.conn.Repos) == 1 && s.conn.Repos[0] == "src-serve-local"
+
+	if srcServe || srcServeLocal {
+		repos, err := s.srcExpose(ctx, srcServeLocal)
 		if err != nil {
 			results <- SourceResult{Source: s, Err: err}
 		}
@@ -96,6 +116,10 @@ func (s OtherSource) ListRepos(ctx context.Context, results chan SourceResult) {
 			results <- SourceResult{Source: s, Err: err}
 			return
 		}
+		if s.excludes(r) {
+			continue
+		}
+
 		results <- SourceResult{Source: s, Repo: r}
 	}
 }
@@ -103,6 +127,10 @@ func (s OtherSource) ListRepos(ctx context.Context, results chan SourceResult) {
 // ExternalServices returns a singleton slice containing the external service.
 func (s OtherSource) ExternalServices() types.ExternalServices {
 	return types.ExternalServices{s.svc}
+}
+
+func (s OtherSource) excludes(r *types.Repo) bool {
+	return s.exclude(string(r.Name))
 }
 
 func (s OtherSource) cloneURLs() ([]*url.URL, error) {
@@ -171,12 +199,32 @@ func (s OtherSource) otherRepoFromCloneURL(urn string, u *url.URL) (*types.Repo,
 	}, nil
 }
 
-func (s OtherSource) srcExpose(ctx context.Context) ([]*types.Repo, error) {
-	reqBody, err := json.Marshal(map[string]any{"roots": s.conn.Roots})
+func (s OtherSource) listReposRequest(withRoots bool) (*http.Request, error) {
+	var (
+		req *http.Request
+		err error
+	)
+
+	// Certain versions of src-serve accept a list of directories to discover git repositories within
+	if withRoots {
+		reqBody, marshalErr := json.Marshal(map[string]any{"roots": s.conn.Roots})
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+
+		req, err = http.NewRequest("POST", s.conn.Url+"/v1/list-repos", bytes.NewReader(reqBody))
+	} else {
+		req, err = http.NewRequest("GET", s.conn.Url+"/v1/list-repos", nil)
+	}
+
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", s.conn.Url+"/v1/list-repos", bytes.NewReader(reqBody))
+	return req, nil
+}
+
+func (s OtherSource) srcExpose(ctx context.Context, withRoots bool) ([]*types.Repo, error) {
+	req, err := s.listReposRequest(withRoots)
 	if err != nil {
 		return nil, err
 	}
@@ -254,6 +302,11 @@ func (s OtherSource) srcExpose(ctx context.Context) ([]*types.Repo, error) {
 		}
 		// Remove any trailing .git in the name if exists (bare repos)
 		repo.Name = api.RepoName(strings.TrimSuffix(name, ".git"))
+
+		if s.excludes(repo) {
+			continue
+		}
+
 		repos = append(repos, repo)
 	}
 

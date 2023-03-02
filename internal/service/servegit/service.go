@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/url"
 	"os"
-	"strings"
 
 	"github.com/sourcegraph/sourcegraph/internal/debugserver"
 	"github.com/sourcegraph/sourcegraph/internal/env"
@@ -16,15 +15,12 @@ import (
 type Config struct {
 	env.BaseConfig
 
-	Addr       string
-	ReposRoots []string
+	Addr      string
+	ReposRoot string
 }
 
 func (c *Config) Load() {
-	// We bypass BaseConfig since it doesn't handle variables being empty.
-	if src, ok := os.LookupEnv("SRC"); ok {
-		c.ReposRoot = src
-	} else if pwd, err := os.Getwd(); err == nil {
+	if pwd, err := os.Getwd(); err == nil {
 		c.ReposRoot = pwd
 	}
 
@@ -51,12 +47,6 @@ func (s svc) Configure() (env.Config, []debugserver.Endpoint) {
 }
 
 func (s svc) Start(ctx context.Context, observationCtx *observation.Context, ready service.ReadyFunc, configI env.Config) (err error) {
-	defer func() {
-		if err == nil {
-			ready()
-		}
-	}()
-
 	config := configI.(*Config)
 
 	// Start servegit which walks ReposRoot to find repositories and exposes
@@ -73,7 +63,7 @@ func (s svc) Start(ctx context.Context, observationCtx *observation.Context, rea
 	// connects to it.
 	//
 	// Note: src.Addr is updated to reflect the actual listening address.
-	if err := ensureExtSVC(observationCtx, "http://"+srv.Addr, config.ReposRoots); err != nil {
+	if err := ensureExtSVC(observationCtx, "http://"+srv.Addr, config.ReposRoot); err != nil {
 		return errors.Wrap(err, "failed to create external service which imports local repositories")
 	}
 

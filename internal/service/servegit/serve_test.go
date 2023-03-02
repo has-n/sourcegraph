@@ -23,26 +23,54 @@ const testAddress = "test.local:3939"
 func TestReposHandler(t *testing.T) {
 	cases := []struct {
 		name  string
-		repos []string
-	}{{
-		name: "empty",
-	}, {
-		name:  "simple",
-		repos: []string{"project1", "project2"},
-	}, {
-		name:  "nested",
-		repos: []string{"project1", "project2", "dir/project3", "dir/project4.bare"},
-	}}
+		repos [][]string
+	}{
+		{
+			name: "empty",
+		}, {
+			name:  "simple",
+			repos: [][]string{{"project1", "project2"}},
+		}, {
+			name: "nested",
+			repos: [][]string{
+				{"project1", "project2", "dir/project3", "dir/project4.bare"},
+			},
+		}, {
+			name: "nested and multiple roots",
+			repos: [][]string{
+				{"project1", "project2", "dir/project3", "dir/project4.bare"},
+				{"project5", "dir/project6"},
+			},
+		},
+	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			var (
+				want  []Repo
+				roots []string
+			)
+			for i := 0; i < len(tc.repos); i++ {
+				currentRoot := gitInitRepos(t, tc.repos[i]...)
+				roots = append(roots, currentRoot)
 
-			root := gitInitRepos(t, tc.repos...)
+				// os may store temp cache directories under /private
+				parent := "/private"
+				_, err := os.ReadDir(parent + currentRoot)
+				if err == nil {
+					currentRoot = filepath.Join(parent, filepath.FromSlash(currentRoot))
+				}
 
-			// os may store temp cache directories under /private
-			parent := "/private"
-			_, err := os.ReadDir(parent + root)
-			if err == nil {
-				root = filepath.Join(parent, filepath.FromSlash(root))
+				for _, name := range tc.repos[i] {
+					isBare := strings.HasSuffix(name, ".bare")
+					uri := path.Join("/repos", currentRoot, name)
+					clonePath := uri
+					if !isBare {
+						clonePath += "/.git"
+					}
+					want = append(want, Repo{Name: name, URI: uri, ClonePath: clonePath})
+
+				}
 			}
 
 			h := (&Serve{
@@ -50,18 +78,7 @@ func TestReposHandler(t *testing.T) {
 				Addr:   testAddress,
 			}).handler()
 
-			var want []Repo
-			for _, name := range tc.repos {
-				isBare := strings.HasSuffix(name, ".bare")
-				uri := path.Join("/repos", root, name)
-				clonePath := uri
-				if !isBare {
-					clonePath += "/.git"
-				}
-				want = append(want, Repo{Name: name, URI: uri, ClonePath: clonePath})
-
-			}
-			testReposHandler(t, h, want, []string{root})
+			testReposHandler(t, h, want, roots)
 		})
 	}
 }
@@ -103,7 +120,6 @@ func testReposHandler(t *testing.T, h http.Handler, repos []Repo, roots []string
 			t.Errorf("index page does not contain substring %q", sub)
 		}
 	}
-
 	for _, rootDir := range roots {
 		// repos page will list the top-level dirs
 		list := get(filepath.Join("/repos/", rootDir))
@@ -184,7 +200,7 @@ func TestIgnoreGitSubmodules(t *testing.T) {
 
 	repos, err := (&Serve{
 		Logger: logtest.Scoped(t),
-	}).Repos([]string{root})
+	}).ReposUnion([]string{root})
 	if err != nil {
 		t.Fatal(err)
 	}

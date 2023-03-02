@@ -16,7 +16,7 @@ func TestEnsureExtSVC(t *testing.T) {
 	testDB := database.NewDB(logger, dbtest.NewDB(logger, t))
 	store := testDB.ExternalServices()
 
-	err := doEnsureExtSVC(context.Background(), store, "http://test", []string{"/root/"})
+	err := doEnsureExtSVC(context.Background(), store, "http://test", "/root/")
 	if err != nil {
 		t.Fatal(err)
 	}
